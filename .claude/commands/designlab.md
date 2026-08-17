@@ -1,0 +1,1 @@
+Run DesignLab V2 for the app path supplied by the user. First inspect `CLAUDE.md` and `README.md`. Do not skip stages. If no run exists, begin with `npm run designlab -- inspect <app-path>`, then `truth`. When a tournament round finishes, stop and tell the user where the four `artifact.html` files and `JUDGE.md` are. Do not select a winner yourself; wait for the user's choice.
