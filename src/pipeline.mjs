@@ -4,7 +4,7 @@ import { scanRepository } from './scanner.mjs';
 import { ensureClaudeAvailable, runClaude } from './claude.mjs';
 import { ensureDir, writeJson, readJson, exists, slug, latestRunRoot } from './artifacts.mjs';
 import { loadConfig, projectRoot } from './config.mjs';
-import { truthPrompt, auditTruthPrompt, contestantPrompt, judgePrompt, featureReviewPrompt, finalSpecPrompt, implementationPrompt, finalAuditPrompt } from './prompts.mjs';
+import { truthPrompt, auditTruthPrompt, capabilityResearchPrompt, contestantPrompt, judgePrompt, featureReviewPrompt, finalSpecPrompt, implementationPrompt, finalAuditPrompt } from './prompts.mjs';
 import { writeFallbackHtml } from './html.mjs';
 
 const config = loadConfig();
@@ -50,13 +50,27 @@ export function buildTruth(appPath) {
     prompt: auditTruthPrompt(truthDir, scanPath), model: config.models.reasoning, cwd: path.resolve(appPath),
     maxTurns: config.claude.maxTurns.judge, allowedTools: ['Read','Glob','Grep','Write']
   });
-  const runState = readJson(path.join(run,'run.json')); runState.status='TRUTH_AUDITED'; writeJson(path.join(run,'run.json'),runState);
-  return { run, truthDir };
+  const capabilityFile = path.join(truthDir, 'CAPABILITY_RESEARCH.md');
+  runClaude({
+    prompt: capabilityResearchPrompt({ truthDir, outputFile: capabilityFile }), model: config.models.worker, cwd: path.resolve(appPath),
+    maxTurns: config.claude.maxTurns.truth, allowedTools: ['Read','Glob','Grep','Write','WebSearch','WebFetch']
+  });
+  const runState = readJson(path.join(run,'run.json'));
+  runState.status='TRUTH_AND_CAPABILITIES_READY';
+  runState.capabilityResearch=capabilityFile;
+  writeJson(path.join(run,'run.json'),runState);
+  return { run, truthDir, capabilityFile };
 }
 
 function requireTruth(run) {
   const file = path.join(run,'truth','CURRENT_APP_TRUTH.md');
   if (!exists(file)) throw new Error('Truth Pack is missing. Run `truth` first.');
+  return file;
+}
+
+function requireCapabilities(run) {
+  const file = path.join(run,'truth','CAPABILITY_RESEARCH.md');
+  if (!exists(file)) throw new Error('Capability Research Pack is missing. Re-run `truth` before starting the tournament.');
   return file;
 }
 
@@ -72,6 +86,7 @@ export function runRound(appPath, stage) {
   if (!['architecture','ux','ui'].includes(stage)) throw new Error('Round must be architecture, ux, or ui.');
   const run = runRootFor(appPath);
   const truthFile = requireTruth(run);
+  const capabilityFile = requireCapabilities(run);
   let winnerContext = '';
   if (stage === 'ux') winnerContext = path.join(run,'rounds','architecture',requireSelection(run,'architecture'),'spec.json');
   if (stage === 'ui') {
@@ -80,7 +95,7 @@ export function runRound(appPath, stage) {
   }
   const ids = config.tournament[stage];
   const stageDir = ensureDir(path.join(run,'rounds',stage));
-  const contextFiles = [truthFile];
+  const contextFiles = [truthFile, capabilityFile];
   if (stage !== 'architecture') contextFiles.push(path.join(run,'rounds','architecture',requireSelection(run,'architecture'),'spec.json'));
   if (stage === 'ui') contextFiles.push(path.join(run,'rounds','ux',requireSelection(run,'ux'),'spec.json'));
 
@@ -158,7 +173,7 @@ export function implement(appPath) {
   ensureClaudeAvailable();
   const run=runRootFor(appPath), specFile=path.join(run,'FINAL_PRODUCT_SPEC.md'); if(!exists(specFile)) throw new Error('Final spec missing. Run `final-spec` first.');
   const reportFile=path.join(run,'IMPLEMENTATION_REPORT.md'); const finalSpecText=fs.readFileSync(specFile,'utf8');
-  runClaude({prompt:implementationPrompt({finalSpecText,reportFile}),model:config.models.worker,cwd:path.resolve(appPath),maxTurns:config.claude.maxTurns.implementation,allowedTools:['Read','Glob','Grep','Write','Edit','Bash']});
+  runClaude({prompt:implementationPrompt({finalSpecText,reportFile}),model:config.models.worker,cwd:path.resolve(appPath),maxTurns:config.claude.maxTurns.implementation,allowedTools:['Read','Glob','Grep','Write','Edit','Bash','WebSearch','WebFetch']});
   return {run,reportFile};
 }
 
