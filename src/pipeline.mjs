@@ -4,7 +4,7 @@ import { scanRepository } from './scanner.mjs';
 import { ensureClaudeAvailable, runClaude } from './claude.mjs';
 import { ensureDir, writeJson, readJson, exists, slug, latestRunRoot } from './artifacts.mjs';
 import { loadConfig, projectRoot } from './config.mjs';
-import { truthPrompt, auditTruthPrompt, capabilityResearchPrompt, contestantPrompt, judgePrompt, featureReviewPrompt, finalSpecPrompt, implementationPrompt, finalAuditPrompt } from './prompts.mjs';
+import { truthPrompt, auditTruthPrompt, capabilityResearchPrompt, contestantPrompt, judgePrompt, designSystemPrompt, featureReviewPrompt, finalSpecPrompt, implementationPrompt, visualVerifyPrompt, finalAuditPrompt } from './prompts.mjs';
 import { writeFallbackHtml } from './html.mjs';
 
 const config = loadConfig();
@@ -13,6 +13,19 @@ const ROOT = projectRoot();
 function modelFor(stage) {
   if (stage === 'ui') return config.models.visual;
   return config.models.reasoning;
+}
+
+// The style mandate for this run. REDESIGN unless the commissioner explicitly
+// asked to keep the current look when they activated DesignLab -- recorded on
+// the run at inspect time so every later stage reads the same answer rather
+// than each one guessing from the app's own (pro-incumbent) design docs.
+function modeFor(run) {
+  try {
+    const state = readJson(path.join(run, 'run.json'));
+    return state.styleMandate === 'PRESERVE_EXISTING' ? 'PRESERVE_EXISTING' : 'REDESIGN';
+  } catch {
+    return 'REDESIGN';
+  }
 }
 
 function runRootFor(appPath, { create = false } = {}) {
@@ -26,13 +39,16 @@ function runRootFor(appPath, { create = false } = {}) {
   return run;
 }
 
-export function inspect(appPath) {
+export function inspect(appPath, { styleMandate } = {}) {
   const run = runRootFor(appPath, { create: true });
   const scan = scanRepository(appPath);
   writeJson(path.join(run, 'repo-scan.json'), scan);
   writeJson(path.join(run, 'run.json'), {
     schemaVersion: 1, appPath: path.resolve(appPath), createdAt: new Date().toISOString(),
-    status: 'SCANNED', selections: {}, models: config.models
+    status: 'SCANNED', selections: {}, models: config.models,
+    // REDESIGN is the default and the reason people come here. Only an explicit
+    // "keep the current styling" at activation flips this.
+    styleMandate: styleMandate === 'PRESERVE_EXISTING' ? 'PRESERVE_EXISTING' : 'REDESIGN'
   });
   return { run, scan };
 }
@@ -107,7 +123,7 @@ export function runRound(appPath, stage) {
     const html = path.join(dir,'artifact.html');
     const spec = path.join(dir,'spec.json');
     const result = runClaude({
-      prompt: contestantPrompt({ stage, personaText, contextFiles, outputHtml: html, outputSpec: spec }),
+      prompt: contestantPrompt({ stage, personaText, contextFiles, outputHtml: html, outputSpec: spec, mode: modeFor(run) }),
       model: modelFor(stage), cwd: path.resolve(appPath), maxTurns: config.claude.maxTurns.contestant,
       allowedTools: ['Read','Write']
     });
@@ -116,7 +132,7 @@ export function runRound(appPath, stage) {
     contestantFiles.push(html);
   }
   runClaude({
-    prompt: judgePrompt({ stage, truthFile, winnerContext, contestantFiles, outputFile:path.join(stageDir,'JUDGE.md') }),
+    prompt: judgePrompt({ stage, truthFile, winnerContext, contestantFiles, outputFile:path.join(stageDir,'JUDGE.md'), mode: modeFor(run) }),
     model: config.models.reasoning, cwd:path.resolve(appPath), maxTurns:config.claude.maxTurns.judge, allowedTools:['Read','Write']
   });
   return { run, stageDir, ids };
@@ -129,6 +145,29 @@ export function selectWinner(appPath, stage, personaId) {
   const stateFile = path.join(run,'run.json'); const state=readJson(stateFile);
   state.selections ||= {}; state.selections[stage]=personaId; state.status=`${stage.toUpperCase()}_SELECTED`; writeJson(stateFile,state);
   return { run, selected: personaId };
+}
+
+// Turn the winning UI spec into the repo's REAL design system before any screen
+// work starts. Without this the winner is a JSON file in runs/ arguing against
+// a tokens module that 200 components import -- an argument it loses every time.
+export function designSystem(appPath) {
+  ensureClaudeAvailable();
+  const run = runRootFor(appPath);
+  const truthDir = path.join(run, 'truth');
+  const uiPersona = requireSelection(run, 'ui');
+  const uiSpecFile = path.join(run, 'rounds', 'ui', uiPersona, 'spec.json');
+  if (!exists(uiSpecFile)) throw new Error('Selected UI spec is missing.');
+  const reportFile = path.join(run, 'DESIGN_SYSTEM_REPORT.md');
+  runClaude({
+    prompt: designSystemPrompt({ uiSpecFile, truthDir, reportFile, mode: modeFor(run) }),
+    model: config.models.worker, cwd: path.resolve(appPath),
+    maxTurns: config.claude.maxTurns.implementation,
+    allowedTools: ['Read','Glob','Grep','Write','Edit','Bash']
+  });
+  const stateFile = path.join(run,'run.json'); const state = readJson(stateFile);
+  state.status = 'DESIGN_SYSTEM_MATERIALISED'; state.designSystemReport = reportFile;
+  writeJson(stateFile, state);
+  return { run, reportFile };
 }
 
 export function featureReview(appPath) {
@@ -165,24 +204,51 @@ export function finalSpec(appPath) {
   const pending=(items||[]).filter(x=>!['APPROVE','REJECT','DEFER'].includes(String(x.decision||x.defaultDecision||'').toUpperCase()));
   if(pending.length) throw new Error(`${pending.length} feature decisions are still pending. Decide them before final-spec.`);
   const outputFile=path.join(run,'FINAL_PRODUCT_SPEC.md');
-  runClaude({prompt:finalSpecPrompt({truthFile,architectureSpec:path.join(run,'rounds','architecture',a,'spec.json'),uxSpec:path.join(run,'rounds','ux',u,'spec.json'),uiSpec:path.join(run,'rounds','ui',i,'spec.json'),decisionsFile,outputFile}),model:config.models.reasoning,cwd:path.resolve(appPath),maxTurns:config.claude.maxTurns.judge,allowedTools:['Read','Write']});
+  runClaude({prompt:finalSpecPrompt({truthFile,architectureSpec:path.join(run,'rounds','architecture',a,'spec.json'),uxSpec:path.join(run,'rounds','ux',u,'spec.json'),uiSpec:path.join(run,'rounds','ui',i,'spec.json'),decisionsFile,outputFile,mode:modeFor(run)}),model:config.models.reasoning,cwd:path.resolve(appPath),maxTurns:config.claude.maxTurns.judge,allowedTools:['Read','Write']});
   return {run,outputFile};
 }
 
 export function implement(appPath) {
   ensureClaudeAvailable();
   const run=runRootFor(appPath), specFile=path.join(run,'FINAL_PRODUCT_SPEC.md'); if(!exists(specFile)) throw new Error('Final spec missing. Run `final-spec` first.');
+  // Screens must be built on top of the new design system, never before it --
+  // otherwise each screen picks up the incumbent tokens it can see today.
+  if (modeFor(run) === 'REDESIGN' && !exists(path.join(run,'DESIGN_SYSTEM_REPORT.md'))) {
+    throw new Error('Design system has not been materialised. Run `design-system` before `build`, or the implementation will inherit the old visual language.');
+  }
   const reportFile=path.join(run,'IMPLEMENTATION_REPORT.md'); const finalSpecText=fs.readFileSync(specFile,'utf8');
-  runClaude({prompt:implementationPrompt({finalSpecText,reportFile}),model:config.models.worker,cwd:path.resolve(appPath),maxTurns:config.claude.maxTurns.implementation,allowedTools:['Read','Glob','Grep','Write','Edit','Bash','WebSearch','WebFetch']});
+  runClaude({prompt:implementationPrompt({finalSpecText,reportFile,mode:modeFor(run)}),model:config.models.worker,cwd:path.resolve(appPath),maxTurns:config.claude.maxTurns.implementation,allowedTools:['Read','Glob','Grep','Write','Edit','Bash','WebSearch','WebFetch']});
   return {run,reportFile};
+}
+
+// Render the built app and check it mechanically. This is the gate that would
+// have caught a 402px-tall tab pill and a floating button sitting on top of the
+// primary call to action -- both of which passed 878 unit tests.
+export function visualVerify(appPath) {
+  ensureClaudeAvailable();
+  const run=runRootFor(appPath), specFile=path.join(run,'FINAL_PRODUCT_SPEC.md');
+  if(!exists(specFile)) throw new Error('Final spec missing. Run `final-spec` first.');
+  const shotDir=ensureDir(path.join(run,'screenshots'));
+  const outputFile=path.join(run,'VISUAL_VERIFICATION.md');
+  runClaude({
+    prompt:visualVerifyPrompt({appPath:path.resolve(appPath),specFile,outputFile,shotDir}),
+    model:config.models.visual, cwd:path.resolve(appPath),
+    maxTurns:config.claude.maxTurns.implementation,
+    allowedTools:['Read','Glob','Grep','Write','Edit','Bash']
+  });
+  return {run,outputFile,shotDir};
 }
 
 export function finalAudit(appPath) {
   ensureClaudeAvailable();
   const run=runRootFor(appPath), truthFile=requireTruth(run), specFile=path.join(run,'FINAL_PRODUCT_SPEC.md'), reportFile=path.join(run,'IMPLEMENTATION_REPORT.md');
   if(!exists(specFile)||!exists(reportFile)) throw new Error('Final spec and implementation report are required.');
+  // No audit without eyes on the running app. An audit that reads only reports
+  // certifies what the implementer believed, not what it built.
+  const visualFile=path.join(run,'VISUAL_VERIFICATION.md');
+  if(!exists(visualFile)) throw new Error('Visual verification is missing. Run `visual-verify` before `final-audit` — an audit with no rendered evidence cannot see layout or styling regressions.');
   const outputFile=path.join(run,'FINAL_AUDIT.md');
-  runClaude({prompt:finalAuditPrompt({truthText:fs.readFileSync(truthFile,'utf8'),finalSpecText:fs.readFileSync(specFile,'utf8'),implementationReportText:fs.readFileSync(reportFile,'utf8'),outputFile}),model:config.models.reasoning,cwd:path.resolve(appPath),maxTurns:config.claude.maxTurns.judge,allowedTools:['Read','Glob','Grep','Write','Bash']});
+  runClaude({prompt:finalAuditPrompt({truthText:fs.readFileSync(truthFile,'utf8'),finalSpecText:fs.readFileSync(specFile,'utf8'),implementationReportText:fs.readFileSync(reportFile,'utf8'),visualReportText:fs.readFileSync(visualFile,'utf8'),outputFile}),model:config.models.reasoning,cwd:path.resolve(appPath),maxTurns:config.claude.maxTurns.judge,allowedTools:['Read','Glob','Grep','Write','Bash']});
   return {run,outputFile};
 }
 
