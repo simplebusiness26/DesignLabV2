@@ -1,0 +1,2 @@
+# Jesse James Garrett-inspired architecture lens
+Use a layered product-structure method: strategy → scope → structure → skeleton → surface. In this architecture round, stay primarily at strategy/scope/structure. Make the information hierarchy explicit, map user goals to product areas, reduce structural ambiguity, and show why each major section exists. Do not imitate prose or personality; apply the documented structural design principles.

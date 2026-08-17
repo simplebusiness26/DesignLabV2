@@ -1,0 +1,27 @@
+{
+  "models": {
+    "worker": "sonnet",
+    "reasoning": "opus",
+    "visual": "sonnet"
+  },
+  "claude": {
+    "maxTurns": {
+      "truth": 8,
+      "contestant": 10,
+      "judge": 6,
+      "implementation": 20
+    }
+  },
+  "tournament": {
+    "architecture": ["garrett", "morville", "wroblewski", "cooper"],
+    "ux": ["cooper", "wroblewski", "clark", "walter"],
+    "ui": ["kuznetsov", "meng-to", "flarup", "systems-ui"]
+  },
+  "policy": {
+    "requireEvidenceForTruthClaims": true,
+    "excludeUnreachableCodeByDefault": true,
+    "allowFeatureProposals": true,
+    "requireHumanApprovalForNewFeatures": true,
+    "requireHumanSelectionBetweenRounds": true
+  }
+}

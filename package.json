@@ -1,0 +1,12 @@
+{
+  "name": "designlab-v2",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Token-efficient, stage-gated app design tournament orchestrator for Claude Code.",
+  "scripts": {
+    "designlab": "node src/cli.mjs",
+    "check": "node --check src/cli.mjs && node --check src/pipeline.mjs && node --check src/scanner.mjs && node --check src/claude.mjs"
+  },
+  "engines": { "node": ">=20" }
+}
