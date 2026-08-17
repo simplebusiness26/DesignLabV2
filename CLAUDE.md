@@ -4,44 +4,49 @@ DesignLab V2 is a stage-gated app-design tournament operated through **natural c
 
 ## Primary user experience
 
-The user should NOT need to run the internal `npm run designlab -- ...` commands manually.
+The user should NOT need to run internal `npm run designlab -- ...` commands manually.
 
 When the user opens Claude Code in this repository and says something equivalent to:
 
 > Design this repository: https://github.com/owner/app
 
-or
+DesignLab takes ownership of the workflow: fetch the app, understand it, research its real technologies, run the tournament, pause only for meaningful human choices, then implement and verify the winning product.
 
-> You're designing this app: https://github.com/owner/app
+## Core philosophy — truth is a floor, not a cage
 
-DesignLab must take ownership of the workflow.
+The Current App Truth Pack exists to protect **capabilities, integrations, data behavior and product reality**. It must NOT freeze the current layout, navigation, screen boundaries, visual language, hierarchy, or interaction patterns.
 
-### On receiving a target repository URL
+Tournament contestants have genuine free rein within their stage.
 
-1. Resolve the target repository URL.
-2. Clone or fetch the target app into a temporary/workspace location outside DesignLab's own source tree when practical.
-3. Run the deterministic inspect stage itself.
-4. Build and audit the Current App Truth Pack itself.
-5. Present a concise summary of what DesignLab believes the current live app is, including active structure, major journeys, and any important uncertainty. Do not burden the user with internal commands.
-6. If the truth audit passes, automatically start the Architecture Tournament.
-7. Stop only when a genuine human judgement is required.
-8. Tell the user exactly which generated HTML artifacts to open and what they are choosing between.
-9. Once the user names a winner in normal language, record the selection and automatically proceed to the next stage.
-10. Repeat through UX and UI.
-11. After UI, automatically generate the Feature Change Review and stop for the user's approve/reject/defer decisions.
-12. Once feature decisions are complete, generate the final product contract and continue into implementation and verification unless the user asks to stop.
+- **Architecture owns structure.** It may move features, regroup them, merge or split screens, replace navigation systems, change hierarchy and radically restructure the product.
+- **UX owns behavior.** It may replace flows, interaction patterns, gestures, progressive disclosure, shortcuts, state handling and task sequences.
+- **UI owns visual expression.** It may completely restyle the app, its components, maps, charts, navigation chrome, typography, density, motion and data presentation.
 
-The internal CLI exists as tooling for Claude Code and for debugging. It is not the intended day-to-day user interface.
+Existing capabilities must survive unless the human approves their alteration/removal. Their old presentation does not have to survive.
+
+A timid cleanup, cosmetic reskin, or close copy of the current app is a weak DesignLab result.
+
+## Capability research is mandatory
+
+After the Truth Pack is audited and before the Architecture Tournament starts, DesignLab must create `CAPABILITY_RESEARCH.md`.
+
+Identify only **active, user-experience-relevant technologies** from evidence in the real app. Examples: MapLibre, OpenStreetMap, map SDKs, charts, media, camera, auth UI, payments, notifications, native component/navigation systems.
+
+Research their **current official documentation** and record what the technology genuinely allows designers and implementers to do: styling/theming, layers, markers, clustering, controls, interactions, animations, custom components, accessibility, attribution/licensing constraints, version-sensitive limitations, etc.
+
+Do not waste tokens researching irrelevant build dependencies. Do not invent technical capabilities.
+
+This research pack is an enabler. Contestants should exploit the real technology instead of treating integrations as untouchable black boxes.
 
 ## Human gates
 
-Claude Code should pause for the user only at these points unless a blocking ambiguity genuinely requires clarification:
+Pause for the user only at genuine product decisions unless a blocking ambiguity cannot be resolved from evidence:
 
 1. **Architecture choice** — four HTML architecture boards.
 2. **UX choice** — four clickable HTML UX prototypes.
 3. **UI choice** — four polished clickable HTML UI prototypes.
-4. **Feature Change Review** — approve, reject, or defer proposed new/altered/removed functionality.
-5. Optional final approval if the user explicitly asks for one before implementation.
+4. **Feature Change Review** — approve, reject, or defer genuinely new/altered/removed product capabilities.
+5. Optional final approval only if the user explicitly asks for it.
 
 Do not stop between mechanical substeps merely to ask permission to continue.
 
@@ -51,48 +56,57 @@ Do not stop between mechanical substeps merely to ask permission to continue.
 2. Repository presence is not product presence.
 3. Unreferenced/orphaned code is excluded by default and must never be silently reconnected.
 4. Every Truth Pack claim needs evidence.
-5. Architecture owns structure. UX owns behavior, journeys and gestures. UI owns visual expression.
-6. Tournament personas may propose new functionality, but it must be labelled `PROPOSED_NEW_FEATURE` or equivalent in the machine-readable spec.
-7. New, altered or removed functionality requires a human decision before production implementation.
-8. Each tournament stage stops for human selection. Losing concepts do not proceed downstream.
-9. Use deterministic tooling instead of an LLM whenever code can prove the answer.
-10. Keep model context compact: downstream rounds receive locked stage artifacts and winning specs, not the entire conversation/repository history.
-11. Never make a final feature decision for the product owner.
+5. The Truth Pack describes current reality; it is not a redesign constraint on presentation.
+6. Preserve **capabilities**, not legacy layouts.
+7. Tournament personas may propose new functionality, but it must be explicitly labelled `PROPOSED_NEW_FEATURE` or equivalent.
+8. New, materially altered, or removed product capabilities require a human decision before production implementation.
+9. Moving/restyling/regrouping an existing capability is not automatically a new feature.
+10. Losing concepts do not proceed downstream.
+11. Use deterministic tooling instead of an LLM whenever code can prove the answer.
+12. Keep model context compact: downstream rounds receive the Truth Pack, Capability Research Pack, and locked winning specs rather than the whole repository/history.
+13. Never make final feature decisions for the product owner.
+14. Final verification must check both **functional preservation** and **design fidelity**. A build that works but retreats to the old design is not a pass.
+
+## Judging philosophy
+
+Every judge must score:
+
+- preservation/coverage of real capabilities
+- usability and coherence
+- technical feasibility
+- strength of the persona's method
+- meaningful transformation
+- originality appropriate to the product
+- explicit handling of proposed new features
+
+Penalize generic, timid, cosmetic redesigns. Reward bold transformation when coherent and technically grounded. Do not reward novelty for novelty's sake.
 
 ## Model routing
 
 - Deterministic scripts: scanning, graph extraction, route/dependency evidence, build/test/lint where possible.
-- Sonnet (`worker`): Truth Pack construction, specs, compliance checks, production implementation, routine fixes.
+- Sonnet (`worker`): Truth Pack construction, capability research, specs, compliance checks, production implementation, routine fixes.
 - Opus (`reasoning`): Truth Pack audit, ambiguous live-vs-legacy decisions, Architecture/UX contestant reasoning, judging, final coherence audits, hard escalations.
 - Visual (`visual`, default Sonnet): UI contestants and visual critique. Override with `DESIGNLAB_VISUAL_MODEL` when a preferred supported visual model is available.
 
 Do not assume an undocumented model alias exists. Model names live in `designlab.config.json` and can be overridden by environment variables.
 
-## Natural-language winner handling
+## Natural-language operation
 
-The user may answer naturally, for example:
+On a target repository URL:
 
-- `I want number 3`
-- `Pick Cooper`
-- `Architecture B`
-- `Use the second UX one`
+1. Clone/fetch the target outside DesignLab's source tree where practical.
+2. Run the deterministic inspection.
+3. Build the Current App Truth Pack.
+4. Run the Opus truth audit.
+5. Build the Capability Research Pack from current official documentation.
+6. Automatically start Architecture if the truth is sound.
+7. Present four artifacts and wait for the user's natural-language choice.
+8. Lock the choice and automatically run UX.
+9. Repeat for UI.
+10. Generate one Feature Change Review containing only genuine capability changes.
+11. Record the user's approve/reject/defer decisions.
+12. Generate the final product contract.
+13. Implement the winning transformation fully.
+14. Test/build and audit functionality plus design fidelity.
 
-Resolve that choice to the corresponding contestant ID, lock it, and continue automatically. Do not make the user type internal IDs if the choice is already unambiguous.
-
-## Internal tooling
-
-The following commands are implementation details that Claude Code may invoke itself:
-
-```bash
-npm run designlab -- inspect <app-path>
-npm run designlab -- truth <app-path>
-npm run designlab -- round architecture <app-path>
-npm run designlab -- select architecture <persona-id> <app-path>
-npm run designlab -- round ux <app-path>
-npm run designlab -- select ux <persona-id> <app-path>
-npm run designlab -- round ui <app-path>
-npm run designlab -- select ui <persona-id> <app-path>
-npm run designlab -- feature-review <app-path>
-```
-
-Claude Code should run these on the user's behalf rather than teaching the user the command sequence.
+The internal CLI exists as machinery for Claude Code and debugging, not as the normal user interface.
