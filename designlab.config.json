@@ -6,10 +6,10 @@
   },
   "claude": {
     "maxTurns": {
-      "truth": 8,
-      "contestant": 10,
-      "judge": 6,
-      "implementation": 20
+      "truth": 14,
+      "contestant": 16,
+      "judge": 10,
+      "implementation": 30
     }
   },
   "tournament": {
