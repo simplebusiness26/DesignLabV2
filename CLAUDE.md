@@ -10,26 +10,7 @@ When the user opens Claude Code in this repository and says something equivalent
 
 > Design this repository: https://github.com/owner/app
 
-DesignLab takes ownership of the workflow: fetch the app, understand it, research its real technologies, run the tournament, pause only for meaningful human choices, then implement and verify the winning product.
-
-## THE STYLE MANDATE — read this before anything else
-
-**Somebody who activates DesignLab has come for a redesign. That is the entire reason this tool exists.**
-
-So the default mandate is `REDESIGN`, and under it:
-
-1. **The app's existing visual language is prior art, not a constraint.** Its palette, tokens, typography, shape language, component look and its own `design-system.md`-style documents describe *the product being replaced*. Record them so the tournament knows what it is superseding. Never treat them as the target.
-2. **The tournament winner supersedes all of it.** Once a UI winner is locked, that spec — not the repo's old design doctrine, and not anything discussed earlier in the conversation — is the single styling authority. Prior design discussion is superseded by the decision.
-3. **"Keep the features" means keep the FUNCTION, not the look.** A preserved capability keeps its data behaviour, its permissions, its integration — and should be styled hard. Someone asking you to preserve a feature is not asking you to preserve its appearance.
-4. **Shipping a working copy of the old look is the failure this project exists to prevent.** It is not a safe outcome. It is the bad one.
-
-The only exception is `PRESERVE_EXISTING`, and it applies **only when the commissioner explicitly asked to keep the current styling in their activation prompt**. Do not infer it from the app having a nice design system, from house rules that lock a palette, or from a persona whose method says "evolve what's there". Record the mandate on the run at inspect time (`--keep-styling` sets it) so every later stage reads one answer.
-
-**Supersession is scoped to styling.** The target repo's rules on product vocabulary, privacy and safety gates, data/schema/migration discipline, testing and commit conventions still bind completely. You override what the product looks like — never how it treats people's data.
-
-### Why this is written so forcefully
-
-A target repo's design doctrine is concrete, authoritative-looking, and sits next to the code being edited; a winning spec in `runs/` is not. Absent an explicit supersession, implementers obey the in-repo file — and deliver a token-consistency cleanup of the old app while reporting success. The `design-system` stage exists to end that argument by making the winner real in the repo *before* any screen is touched.
+DesignLab takes ownership of the workflow: fetch the app, understand it, research its real technologies, run the tournament, pause only for meaningful human choices, then reproduce and verify the winning product.
 
 ## Core philosophy — truth is a floor, not a cage
 
@@ -45,6 +26,30 @@ Existing capabilities must survive unless the human approves their alteration/re
 
 A timid cleanup, cosmetic reskin, or close copy of the current app is a weak DesignLab result.
 
+## The Design Lock — mandatory and immutable
+
+**Once the user selects the UI winner, design is over.**
+
+At UI selection, DesignLab creates `design-lock/` inside the run and snapshots the selected:
+
+- Architecture `artifact.html` + `spec.json`
+- UX `artifact.html` + `spec.json`
+- UI `artifact.html` + `spec.json`
+
+The lock manifest stores SHA-256 hashes. If any locked artifact changes after selection, the pipeline must fail rather than silently accept a changed design.
+
+The locked HTML artifacts are **implementation references, not inspiration or mood boards**.
+
+Precedence after locking:
+
+1. Human feature decisions govern capability additions/alterations/removals.
+2. Architecture HTML/spec governs structure, hierarchy, navigation and screen boundaries.
+3. UX HTML/spec governs flows, states, gestures and interaction behavior.
+4. UI HTML/spec governs visual appearance: layout composition, typography, spacing, color, component anatomy, shape, density, navigation chrome, map/camera treatment and motion treatment.
+5. Existing app code is only an implementation substrate. It has no design authority where it conflicts with the lock.
+
+After the Design Lock, no agent may invent another product design merely because the approved design is difficult to implement. Refactor the code instead. If a locked detail is truly impossible with the active technology, verify that with evidence, implement the nearest faithful equivalent, and record a `FIDELITY_EXCEPTION`. Never silently redesign.
+
 ## Capability research is mandatory
 
 After the Truth Pack is audited and before the Architecture Tournament starts, DesignLab must create `CAPABILITY_RESEARCH.md`.
@@ -56,6 +61,14 @@ Research their **current official documentation** and record what the technology
 Do not waste tokens researching irrelevant build dependencies. Do not invent technical capabilities.
 
 This research pack is an enabler. Contestants should exploit the real technology instead of treating integrations as untouchable black boxes.
+
+## Whole-app coverage
+
+`ROUTE_COVERAGE.json` is a binding coverage contract. It must enumerate every reachable user-facing destination and state family: hero screens, profile/profile subpages, settings, camera/capture, details, modals/sheets, onboarding, low-frequency routes, empty/error/loading states and other reachable UI.
+
+Every contestant must account for every route id. A selected UI artifact must contain an actual designed representation for every route, either directly in the clickable prototype or in a clearly linked route/state gallery. Specs alone are not enough to leave a route visually unspecified.
+
+A beautiful main screen does not compensate for legacy-looking secondary screens.
 
 ## Human gates
 
@@ -82,12 +95,10 @@ Do not stop between mechanical substeps merely to ask permission to continue.
 9. Moving/restyling/regrouping an existing capability is not automatically a new feature.
 10. Losing concepts do not proceed downstream.
 11. Use deterministic tooling instead of an LLM whenever code can prove the answer.
-12. Keep model context compact: downstream rounds receive the Truth Pack, Capability Research Pack, and locked winning specs rather than the whole repository/history.
+12. Downstream rounds receive the winning HTML **and** spec, not a lossy text summary alone.
 13. Never make final feature decisions for the product owner.
-14. Final verification must check both **functional preservation** and **design fidelity**. A build that works but retreats to the old design is not a pass.
-15. **Nothing is "done" until it has been rendered and looked at.** Passing tests are not evidence of a working interface — a unit test asserting a control renders passes happily while that control is ten times its intended height or sits underneath another one. Every implementation pass ends with the app actually running, screenshotted at a realistic device viewport, and checked mechanically (nothing stretched by an unconstrained flex parent, no overlay covering content, nothing under nav chrome or outside safe areas, no unreadable text, no console errors). If the app cannot be made to render, say so loudly — never substitute a green test suite for eyes.
-16. **The visual system in the built app must be the winner's, not the incumbent's.** Sample real rendered pixels to prove it. An app whose screenshots show the old palette has failed the commission even if every capability works and every test passes.
-17. **Nobody owns the seams unless someone is told to.** When implementation fans out across parallel agents with disjoint files, composition bugs — a global overlay covering a screen's primary action, inconsistent insets, chrome collisions — belong to no one by construction. The orchestrator owns an explicit composition pass after the agents land, and must not delegate it.
+14. Final verification must check both **functional preservation** and **direct fidelity to the locked artifacts**. A build that works but is materially different from the selected design is not a pass.
+15. Locked artifacts are immutable and hash-verified before/after implementation and repair stages.
 
 ## Judging philosophy
 
@@ -103,15 +114,38 @@ Every judge must score:
 
 Penalize generic, timid, cosmetic redesigns. Reward bold transformation when coherent and technically grounded. Do not reward novelty for novelty's sake.
 
-**UI round, incumbent-similarity check (runs before scoring).** Compare every entry's design system against `CURRENT_DESIGN_SYSTEM.json`. An entry that carries the incumbent palette, typefaces and shape language substantially unchanged is **INELIGIBLE** under a `REDESIGN` mandate, however neat it is — it did not do the job it was commissioned for. An entry may legitimately *evolve* a strong existing idea, but it must argue a new visual position rather than inherit the old one by default; if you cannot tell its palette from the incumbent's at a glance, that is inheritance.
+## Implementation mode — reproduction, not redesign
 
-Score down hard any UI entry whose design system is too abstract to build from — "evolve the existing feel", no hex values, no real type stacks. Implementers resolve vagueness by reaching for the file already in the repo, so an abstract spec reliably ships as the old design.
+The production agent is a **reproduction engineer** after UI selection.
+
+Before its first product edit it must read the Design Lock manifest, final contract, and all six locked HTML/spec files. It must implement route-by-route against those references.
+
+Forbidden implementation behavior includes:
+
+- generating another UI direction
+- replacing distinctive locked components with generic defaults
+- restoring old layouts because they are easier to code
+- leaving profile/settings/camera/secondary routes on the previous design system
+- treating the selected UI HTML as a loose mood board
+- silently changing interactions or capability behavior
+
+If code architecture fights the design, change the code architecture.
+
+## Final fidelity audit and repair loop
+
+The final Opus audit must compare the CURRENT APP directly against the locked Architecture, UX and UI artifacts, not merely against the implementation report.
+
+It must audit every reachable route and concrete visual/interaction qualities such as hierarchy, composition, component anatomy, typography, spacing, shape, density, navigation chrome, state treatment and integration surfaces. Where practical, use existing preview/e2e/screenshot tooling to inspect rendered routes.
+
+A compile/test pass is not sufficient evidence of design fidelity.
+
+If the audit returns `STATUS: NEEDS_REVIEW`, DesignLab automatically runs a fidelity repair pass that is expressly forbidden from redesigning. It may only correct deviations toward the existing lock, then Opus re-audits. Up to three audit attempts are allowed. If fidelity still cannot be established, the run remains `NEEDS_REVIEW` rather than pretending completion.
 
 ## Model routing
 
-- Deterministic scripts: scanning, graph extraction, route/dependency evidence, build/test/lint where possible.
-- Sonnet (`worker`): Truth Pack construction, capability research, specs, compliance checks, production implementation, routine fixes.
-- Opus (`reasoning`): Truth Pack audit, ambiguous live-vs-legacy decisions, Architecture/UX contestant reasoning, judging, final coherence audits, hard escalations.
+- Deterministic scripts: scanning, graph extraction, route/dependency evidence, design-lock hashing, build/test/lint where possible.
+- Sonnet (`worker`): Truth Pack construction, capability research, specs, compliance checks, production reproduction, fidelity repairs.
+- Opus (`reasoning`): Truth Pack audit, ambiguous live-vs-legacy decisions, Architecture/UX contestant reasoning, judging, final contract and final fidelity audit.
 - Visual (`visual`, default Sonnet): UI contestants and visual critique. Override with `DESIGNLAB_VISUAL_MODEL` when a preferred supported visual model is available.
 
 Do not assume an undocumented model alias exists. Model names live in `designlab.config.json` and can be overridden by environment variables.
@@ -120,32 +154,21 @@ Do not assume an undocumented model alias exists. Model names live in `designlab
 
 On a target repository URL:
 
-1. **Determine the style mandate from the activation prompt.** Default `REDESIGN`. Only `PRESERVE_EXISTING` if the user explicitly asked to keep the current styling. Record it on the run — it governs every stage after.
-2. Clone/fetch the target outside DesignLab's source tree where practical.
-3. Run the deterministic inspection.
-4. Build the Current App Truth Pack, including `CURRENT_DESIGN_SYSTEM.json` — the incumbent visual language recorded as prior art, with a complete list of every in-repo file that asserts styling authority.
-5. Run the Opus truth audit.
-6. Build the Capability Research Pack from current official documentation, including the stack's real styling ceiling.
-7. Automatically start Architecture if the truth is sound.
-8. Present four artifacts and wait for the user's natural-language choice.
-9. Lock the choice and automatically run UX.
-10. Repeat for UI.
-11. **Materialise the winning design system into the app** (`design-system`) — rewrite the token module and every superseded styling-doctrine file so the winner is the repo's real system *before* any screen is built.
-12. Generate one Feature Change Review containing only genuine capability changes. Visual change is never a reviewable feature — it is the commissioned work.
-13. Record the user's approve/reject/defer decisions.
-14. Generate the final product contract, with the winning token table reproduced inside it.
-15. Implement the winning transformation fully, then run an orchestrator-owned composition pass across the assembled screens.
-16. **Render the app and verify it visually** (`visual-verify`) — screenshots at device viewport, mechanical geometry assertions, pixel-sampled proof the new design system is what actually renders.
-17. Final audit of functionality, design fidelity and visual evidence together.
-
-Stage order is load-bearing in two places: `design-system` must precede `build`, or screens inherit the old tokens; `visual-verify` must precede `final-audit`, or the audit certifies what the implementer believed rather than what it built. The pipeline enforces both.
-
-### When a blend wins
-
-The user will often pick ideas across entries rather than one entry whole ("that navigation, but that one's camera"). Treat the blend as the locked winner: write it to its own `blend-*` spec directory with full `routeCoverage` and a complete `designSystem`, and select it. A blend's design system must be as concrete as any single entry's — if the blend's styling is left implicit, implementers resolve the ambiguity with the incumbent system.
-
-### Show the work early
-
-Do not run a long implementation to completion before the user sees a rendered screen. Get one real screen on the device viewport, screenshot it, show it, and confirm the direction before building the other seventy. A screenshot at hour one is worth more than a green test suite at hour six.
+1. Clone/fetch the target outside DesignLab's source tree where practical.
+2. Run the deterministic inspection.
+3. Build the Current App Truth Pack and route coverage contract.
+4. Run the Opus truth audit.
+5. Build the Capability Research Pack from current official documentation.
+6. Automatically start Architecture if the truth is sound.
+7. Present four artifacts and wait for the user's natural-language choice.
+8. Pass the selected Architecture HTML + spec directly into UX.
+9. Present UX choices, then pass the selected UX HTML + spec directly into UI.
+10. Present UI choices. When the user selects one, create and hash the immutable Design Lock.
+11. Generate one Feature Change Review from the locked artifacts and Truth Pack.
+12. Record the user's approve/reject/defer decisions.
+13. Generate the final product contract from the locked artifacts without redesigning them.
+14. Reproduce the selected design in the real app route-by-route.
+15. Test/build and run direct design-fidelity audit.
+16. If needed, automatically repair deviations toward the same lock and re-audit. Never generate a replacement design during repair.
 
 The internal CLI exists as machinery for Claude Code and debugging, not as the normal user interface.

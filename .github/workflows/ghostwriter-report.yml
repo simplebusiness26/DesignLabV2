@@ -2,65 +2,101 @@ name: Ghost Writer project report
 
 on:
   push:
-    branches: [agent/designlab-v2-orchestrator]
+    branches:
+      - "**"
+    tags-ignore:
+      - "**"
+    paths-ignore:
+      - "ghostwriter-bridge.mjs"
+      - ".env.example"
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
     paths-ignore:
       - "ghostwriter-bridge.mjs"
       - ".github/workflows/ghostwriter-report.yml"
+      - ".env.example"
   workflow_dispatch:
 
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: ghostwriter-report-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  report-designlab-v2:
+  report-project-activity:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     env:
       GHOSTWRITER_ENDPOINT: https://theghostwriterv2.onrender.com
       GHOSTWRITER_PROJECT_ID: designlab-v2
-      GHOSTWRITER_PROJECT_ORIGIN: new
-      GHOSTWRITER_INGEST_SECRET: ${{ secrets.GHOSTWRITER_INGEST_SECRET }}
+      GHOSTWRITER_PROJECT_ORIGIN: existing
     steps:
+      - name: Select Ghost Writer authentication
+        run: |
+          if [ -n "$GHOSTWRITER_INGEST_SECRET" ]; then
+            echo "Using HMAC authentication."
+          else
+            echo "Using GitHub OIDC authentication."
+          fi
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 30
 
-      - name: Skip until ingest secret is configured
-        if: ${{ env.GHOSTWRITER_INGEST_SECRET == '' }}
-        run: echo "Ghost Writer reporting is installed but inactive until the GHOSTWRITER_INGEST_SECRET repository secret is added."
-
-      - name: Bootstrap DesignLab V2 launch story
-        if: ${{ github.event_name == 'workflow_dispatch' && env.GHOSTWRITER_INGEST_SECRET != '' }}
-        run: |
-          node --input-type=module <<'NODE'
-          import { sendGhostWriterEvent } from "./ghostwriter-bridge.mjs";
-          await sendGhostWriterEvent({
-            source: "github-actions-project-report",
-            sourceEventId: "designlab-v2-project-start",
-            type: "project.started",
-            truthState: "in_progress",
-            privacy: "content_eligible",
-            contentEligible: true,
-            title: "Started DesignLab V2",
-            summary: "DesignLab V2 is a token-efficient, stage-gated app design tournament for Claude Code. It reconstructs what an existing app actually does, runs separate Architecture, UX and UI competitions with human winner selection, surfaces proposed feature changes for approval, and only then proceeds toward implementation and verification.",
-            sourceReference: "https://github.com/simplebusiness26/DesignLabV2",
-            payload: {
-              projectOrigin: "new",
-              branch: "agent/designlab-v2-orchestrator"
-            }
-          });
-          NODE
+      - name: Bootstrap existing project context
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: node ghostwriter-bridge.mjs --bootstrap-existing
 
       - name: Verify DesignLab V2 source
         if: ${{ github.event_name == 'push' }}
         run: npm run check
 
-      - name: Report DesignLab V2 commits
-        if: ${{ github.event_name == 'push' && env.GHOSTWRITER_INGEST_SECRET != '' }}
+      - name: Report pushed commits
+        if: ${{ github.event_name == 'push' }}
         run: |
           node --input-type=module <<'NODE'
           import { readFileSync } from "node:fs";
           import { sendGhostWriterEvent } from "./ghostwriter-bridge.mjs";
 
-          const payload = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"));
-          const branch = String(payload.ref ?? "").replace(/^refs\/heads\//, "");
-          for (const commit of payload.commits ?? []) {
+          const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"));
+          const branch = String(event.ref ?? "").replace(/^refs\/heads\//, "");
+          const repository = event.repository?.name ?? process.env.GITHUB_REPOSITORY?.split("/").pop() ?? process.env.GHOSTWRITER_PROJECT_ID;
+          const watcherPaths = new Set([
+            "ghostwriter-bridge.mjs",
+            ".github/workflows/ghostwriter-report.yml",
+            ".env.example"
+          ]);
+
+          for (const commit of event.commits ?? []) {
+            const changedPaths = [
+              ...(commit.added ?? []),
+              ...(commit.modified ?? []),
+              ...(commit.removed ?? [])
+            ];
+            if (changedPaths.length > 0 && changedPaths.every((path) => watcherPaths.has(path))) {
+              await sendGhostWriterEvent({
+                source: "github-actions-project-report",
+                sourceEventId: commit.id,
+                type: "project.connected",
+                truthState: "completed",
+                privacy: "internal",
+                contentEligible: false,
+                title: `${repository} Ghost Writer connection updated`,
+                summary: "The repository watcher configuration was updated and its authenticated connection was verified.",
+                sourceReference: commit.url,
+                payload: {
+                  repository: event.repository?.full_name,
+                  branch,
+                  projectOrigin: "existing",
+                  connectionUpdate: true
+                }
+              });
+              continue;
+            }
+
             await sendGhostWriterEvent({
               source: "github-actions-project-report",
               sourceEventId: commit.id,
@@ -68,29 +104,77 @@ jobs:
               truthState: "in_progress",
               privacy: "content_eligible",
               contentEligible: true,
-              title: "DesignLab V2 development update",
+              title: `${repository} development update`,
               summary: commit.message,
               sourceReference: commit.url,
               payload: {
+                repository: event.repository?.full_name,
                 branch,
-                projectOrigin: "new"
+                before: event.before,
+                after: event.after,
+                projectOrigin: "existing"
               }
             });
           }
+          NODE
 
+      - name: Report DesignLab V2 verification
+        if: ${{ github.event_name == 'push' }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+          import { sendGhostWriterEvent } from "./ghostwriter-bridge.mjs";
+
+          const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"));
+          const branch = String(event.ref ?? "").replace(/^refs\/heads\//, "");
           await sendGhostWriterEvent({
             source: "github-actions-project-report",
-            sourceEventId: `designlab-v2-check:${payload.after}`,
+            sourceEventId: `designlab-v2-check:${event.after}`,
             type: "test.passed",
             truthState: "completed",
             privacy: "content_eligible",
             contentEligible: true,
             title: "DesignLab V2 verification passed",
             summary: "The DesignLab V2 source syntax verification completed successfully with npm run check.",
-            sourceReference: `https://github.com/simplebusiness26/DesignLabV2/commit/${payload.after}`,
+            sourceReference: `https://github.com/${event.repository?.full_name}/commit/${event.after}`,
             payload: {
+              repository: event.repository?.full_name,
               branch,
-              projectOrigin: "new"
+              projectOrigin: "existing"
+            }
+          });
+          NODE
+
+      - name: Report pull request activity
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+          import { sendGhostWriterEvent } from "./ghostwriter-bridge.mjs";
+
+          const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"));
+          const pr = event.pull_request;
+          const merged = event.action === "closed" && pr?.merged === true;
+          const repository = event.repository?.name ?? process.env.GITHUB_REPOSITORY?.split("/").pop() ?? process.env.GHOSTWRITER_PROJECT_ID;
+
+          await sendGhostWriterEvent({
+            source: "github-actions-project-report",
+            sourceEventId: `pull-request:${event.number}:${event.action}:${pr?.head?.sha ?? "unknown"}`,
+            type: merged ? "git.merge" : "git.pull_request",
+            truthState: merged ? "completed" : "in_progress",
+            privacy: merged ? "content_eligible" : "internal",
+            contentEligible: merged,
+            title: merged ? `${repository} pull request merged` : `${repository} pull request updated`,
+            summary: pr?.title ?? `Pull request #${event.number}`,
+            sourceReference: pr?.html_url,
+            payload: {
+              repository: event.repository?.full_name,
+              pullRequest: event.number,
+              action: event.action,
+              headBranch: pr?.head?.ref,
+              baseBranch: pr?.base?.ref,
+              merged,
+              projectOrigin: "existing"
             }
           });
           NODE

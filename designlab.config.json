@@ -6,7 +6,7 @@
   },
   "claude": {
     "maxTurns": {
-      "truth": 24,
+      "truth": 14,
       "contestant": 16,
       "judge": 10,
       "implementation": 30
@@ -22,18 +22,6 @@
     "excludeUnreachableCodeByDefault": true,
     "allowFeatureProposals": true,
     "requireHumanApprovalForNewFeatures": true,
-    "requireHumanSelectionBetweenRounds": true,
-
-    "styleMandate": "REDESIGN",
-    "materialiseWinningDesignSystem": true,
-    "rejectIncumbentVisualSystemInUiRound": true,
-    "requireVisualVerificationBeforeAudit": true,
-    "requireScreenshotEvidence": true
-  },
-
-  "notes": {
-    "styleMandate": "REDESIGN is the default and the reason people commission this tool. Per-run override lives in run.json and is set by `inspect --keep-styling`, which should only be used when the commissioner explicitly asked to keep the current look.",
-    "materialiseWinningDesignSystem": "Rewrites the target repo's tokens and superseded design-doctrine files from the winning UI spec BEFORE screens are built. Without this the winner is a JSON file arguing against a tokens module that every component imports.",
-    "requireVisualVerificationBeforeAudit": "Test suites cannot see layout. A 402px-tall tab pill and a floating button covering the primary CTA both passed 878 unit tests once; only a render caught them."
+    "requireHumanSelectionBetweenRounds": true
   }
 }
